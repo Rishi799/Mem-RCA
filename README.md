@@ -1,63 +1,95 @@
-# Mem-RCA — Open-World Root Cause Analysis for Microservices
+# Mem-RCA
 
-**Course:** AI253IA — Artificial Neural Networks & Deep Learning (PBL), RV College of Engineering
+**Uncertainty-aware root-cause diagnosis for microservices**
+
+**Course:** AI253IA — Artificial Neural Networks & Deep Learning (PBL), RV College of Engineering<br>
 **Team:** Priyanshi Gupta (1RV24CI088) · Rishi Agarwal (1RV24CI099) · Sambhav Badaya (1RV24CI106)
 
-Mem-RCA finds which microservice caused a failure, names the failure type — and says **NOVEL**
-when the failure is of a type it has never seen, instead of guessing a wrong known type.
-Recurring novel failures are clustered into candidate new types and enrolled into memory
-without retraining.
+Mem-RCA is a deep learning project for detecting abnormal microservice behavior and identifying the service most likely to have initiated an incident. It uses service dependencies as context for diagnosis and is designed to report when a fault is unfamiliar or the available evidence is insufficient, rather than always forcing a known-fault prediction.
 
-## Folder structure
+## Research direction
 
-```
-ANN PROJECT/
-├── configs/data.yaml      dataset paths, fault types, open-world folds
-├── src/memrca/            the Python package (data loading, models, evaluation)
-├── scripts/               command-line entry points (download, explore, train, ...)
-├── data/raw/              RCAEval dataset (not committed to git)
-└── experiments/           figures, logs, results (not committed to git)
-```
+The main research question is whether graph-informed diagnosis can remain reliable when fault types are held out from training and telemetry is incomplete. The intended system will:
 
-## Setup (Windows, Python 3.13)
+- detect abnormal behavior from service telemetry;
+- rank likely root-cause services using metric evidence and service dependencies;
+- distinguish known fault classes from unfamiliar or uncertain incidents;
+- evaluate how diagnosis changes when telemetry sources are missing.
 
-```
+The demonstration will replay recorded RCAEval incidents and visualize their telemetry and service relationships. This is a repeatable replay, not a live production monitoring system. Predicting downstream impact times is a possible extension if reliable onset labels are available.
+
+## Current implementation
+
+The repository currently contains the project scaffold and data exploration tools:
+
+- `src/memrca/data/loader.py` reads the RCAEval case index, metrics, logs, traces, and fault injection time.
+- `scripts/download.py` downloads dataset suites from Hugging Face.
+- `scripts/explore_case.py` summarizes one case, ranks services by a simple metric-shift score, and saves plots.
+- `configs/data.yaml` records the RE2 systems, fault classes, and provisional known/unseen folds.
+
+Model training, graph-based diagnosis, unknown-fault handling, and the replay interface have not yet been implemented. The current metric-shift ranking in the explorer is a data-inspection aid, not a trained model or a project result.
+
+## Dataset
+
+The project uses [RCAEval](https://huggingface.co/datasets/phamquiluan/RCAEval), a public benchmark containing 735 cases from Online Boutique (`ob`), Sock Shop (`ss`), and Train Ticket (`tt`). The case index includes metadata for all suites; download RE2 for the initial multi-source experiments.
+
+| Suite | Cases | Telemetry | Intended use |
+|---|---:|---|---|
+| RE1 | 375 | Metrics | Optional metric-only comparison |
+| RE2 | 270 | Metrics, logs, traces | Main initial dataset |
+| RE3 | 90 | Metrics, logs, traces | Optional code-level fault evaluation |
+
+An RE2 case folder is named like `re2ob_checkoutservice_cpu_1` and contains `metrics.parquet`, `logs.parquet`, `traces.parquet`, and `inject_time.txt`. The timestamp separates the recorded pre-injection and post-injection periods. Some cases or suites may not include every telemetry file.
+
+The full RE2 download is approximately 3 GB. Raw data and generated experiment outputs are excluded from Git; download the dataset separately in each working copy.
+
+## Setup
+
+Windows with Python 3.11 or later:
+
+```powershell
 py -3.13 -m venv .venv
-.venv\Scripts\activate
-pip install torch --index-url https://download.pytorch.org/whl/cu128
-pip install -e .
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-Check the GPU: `python -c "import torch; print(torch.cuda.is_available())"` should print `True`.
+PyTorch is not currently required by the implemented tools. Install the appropriate PyTorch build separately when model training is added.
 
-## Dataset: RCAEval
+## Download and explore RE2
 
-Public benchmark (MIT licence) with 735 failure cases from three microservice systems
-(Online Boutique `ob`, Sock Shop `ss`, Train Ticket `tt`).
+From the repository root:
 
-| Suite | Cases | Data | Use in this project |
-|---|---|---|---|
-| **RE2** (start here) | 270 | metrics, logs, traces | main open-world experiments |
-| RE1 | 375 | metrics | localisation, LSTM training |
-| RE3 | 90 | code-level faults | extra NOVEL test set |
-
-Each case is a folder `<suite><system>_<service>_<fault>_<repetition>`
-(e.g. `re2ob_checkoutservice_cpu_1`) containing `metrics.parquet`, `logs.parquet`,
-`traces.parquet` and `inject_time.txt` (data before this timestamp is normal, after it is faulty).
-`cases.parquet` indexes all cases (root-cause service, fault type, …).
-
-```
-python scripts/download.py                 # RE2 into data/raw (about 2 GB)
-python scripts/explore_case.py             # summary + figures for one case
-python scripts/explore_case.py --case re2tt_ts-order-service_cpu_1
+```powershell
+python scripts/download.py --suite re2
+python scripts/explore_case.py
 ```
 
-Second dataset (later, around week 5): PetShop — github.com/amazon-science/petshop-root-cause-analysis
+To download one system only:
 
-## Week 1 plan
+```powershell
+python scripts/download.py --suite re2 --system ob
+```
 
-1. Download RE2 into `data/raw/`.
-2. Explore cases: sampling interval, metric types per service, what each fault does.
-3. Preprocess: normalise with normal-period statistics, cut windows, handle missing metrics.
-4. Build service graphs from traces (Sock Shop: documented architecture if traces are missing).
-5. Build the open-world folds (`configs/data.yaml`) and the held-out services.
+To inspect a specific downloaded case:
+
+```powershell
+python scripts/explore_case.py --case re2ob_checkoutservice_cpu_1
+```
+
+The explorer prints sampling interval, missing-value rate, metrics per service, and the top services by metric shift. It writes figures to `experiments/explore/` by default.
+
+## Project layout
+
+```text
+configs/data.yaml          Dataset settings and provisional open-world folds
+scripts/download.py        RCAEval download command
+scripts/explore_case.py    Case summary and exploratory figures
+src/memrca/data/loader.py  RCAEval data loading and case helpers
+data/raw/                  Downloaded dataset; ignored by Git
+experiments/               Generated figures and results; ignored by Git
+```
+
+## Evaluation considerations
+
+The configured folds are starting points and must be checked before model evaluation. Keep incidents, rather than overlapping windows from one incident, separated across splits. Tune any unknown-fault threshold using validation data only. Report anomaly detection, root-cause ranking, unknown-fault detection, and robustness to missing telemetry separately. RE2 has three repetitions per fault/service configuration, so results should be interpreted with that limited repetition count in mind.
