@@ -1,0 +1,23 @@
+# Data settings for Mem-RCA.
+raw_dir: data/raw
+processed_dir: data/processed
+
+# RCAEval suite used for the main open-world experiments.
+suite: re2
+systems: [ob, ss, tt]          # Online Boutique, Sock Shop, Train Ticket
+
+fault_types: [cpu, mem, disk, delay, loss, socket]
+
+# Open-world folds: held-out fault types never appear in training.
+folds:
+  fold1: {known: [cpu, mem, delay, loss],      unseen: [disk, socket]}
+  fold2: {known: [mem, disk, delay, socket],   unseen: [cpu, loss]}
+  fold3: {known: [cpu, disk, loss, socket],    unseen: [mem, delay]}
+
+# For known types: repetitions used for training vs testing.
+train_repetitions: [1, 2]
+test_repetitions: [3]
+
+# Window length (in timesteps) is chosen after checking the sampling interval
+# with scripts/explore_case.py.
+window_length: null
