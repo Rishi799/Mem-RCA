@@ -14,9 +14,16 @@ folds:
   fold2: {known: [mem, disk, delay, socket],   unseen: [cpu, loss]}
   fold3: {known: [cpu, disk, loss, socket],    unseen: [mem, delay]}
 
-# For known types: repetitions used for training vs testing.
-train_repetitions: [1, 2]
+# Case-level split by repetition. Use the same root-cause/fault combinations
+# across different repetitions only in their assigned split; never split windows
+# from one case across train, validation, and test.
+train_repetitions: [1]
+validation_repetitions: [2]
 test_repetitions: [3]
+
+# For each fold, unseen fault types are excluded from both train and validation
+# and appear only in the test split. Tune anomaly and unknown-fault thresholds
+# using validation cases only.
 
 # Window length (in timesteps) is chosen after checking the sampling interval
 # with scripts/explore_case.py.

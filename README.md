@@ -23,7 +23,9 @@ The demonstration will replay recorded RCAEval incidents and visualize their tel
 The repository currently contains the project scaffold and data exploration tools:
 
 - `src/memrca/data/loader.py` reads the RCAEval case index, metrics, logs, traces, and fault injection time.
+- `src/memrca/data/graph.py` extracts observed parent-service to child-service edges from trace span IDs.
 - `scripts/download.py` downloads dataset suites from Hugging Face.
+- `scripts/audit_dataset.py` checks downloaded-file coverage and label/repetition balance from the case index.
 - `scripts/explore_case.py` summarizes one case, ranks services by a simple metric-shift score, and saves plots.
 - `configs/data.yaml` records the RE2 systems, fault classes, and provisional known/unseen folds.
 
@@ -42,6 +44,8 @@ The project uses [RCAEval](https://huggingface.co/datasets/phamquiluan/RCAEval),
 An RE2 case folder is named like `re2ob_checkoutservice_cpu_1` and contains `metrics.parquet`, `logs.parquet`, `traces.parquet`, and `inject_time.txt`. The timestamp separates the recorded pre-injection and post-injection periods. Some cases or suites may not include every telemetry file.
 
 The full RE2 download is approximately 3 GB. Raw data and generated experiment outputs are excluded from Git; download the dataset separately in each working copy.
+
+The downloaded RE2 index reports logs for 269 of 270 cases and traces for 180 of 270 cases: Sock Shop has no traces, and one Train Ticket case has no logs. The index lists about 43.6 million log rows and 101.8 million trace spans, so process these modalities per case or aggregate them before model training. Metric files have 930–1,441 one-second samples and 69–376 metric columns per case. The trace-derived graph represents observed call structure; an edge alone is not evidence that one service caused another to fail.
 
 ## Setup
 
@@ -62,6 +66,7 @@ From the repository root:
 
 ```powershell
 python scripts/download.py --suite re2
+python scripts/audit_dataset.py --suite re2
 python scripts/explore_case.py
 ```
 
@@ -84,8 +89,9 @@ The explorer prints sampling interval, missing-value rate, metrics per service, 
 ```text
 configs/data.yaml          Dataset settings and provisional open-world folds
 scripts/download.py        RCAEval download command
+scripts/audit_dataset.py   Dataset coverage and split-balance report
 scripts/explore_case.py    Case summary and exploratory figures
-src/memrca/data/loader.py  RCAEval data loading and case helpers
+src/memrca/data/           RCAEval loading and trace-derived service edges
 data/raw/                  Downloaded dataset; ignored by Git
 experiments/               Generated figures and results; ignored by Git
 ```
