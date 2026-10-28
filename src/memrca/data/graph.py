@@ -19,6 +19,7 @@ def normalize_service_name(name: str, metric_services: Iterable[str] | None = No
 
     For example, in Online Boutique, 'frontendservice' in traces corresponds to
     'frontend' in metric telemetry when metric_services contains 'frontend'.
+    Matching is case-insensitive when an exact metric-service name is not found.
     """
     clean_name = str(name).strip()
     if not metric_services:
@@ -81,6 +82,10 @@ def extract_trace_graph_diagnostics(
     spans["spanID"] = spans["spanID"].astype(str)
     spans["parentSpanID"] = spans["parentSpanID"].fillna("").astype(str).str.strip()
     spans["serviceName"] = spans["serviceName"].astype(str).str.strip()
+
+    # RCAEval contains repeated span rows. Keep the first exported record for
+    # each trace/span so duplicates do not inflate parent-child edge counts.
+    spans = spans.drop_duplicates(["traceID", "spanID"], keep="first")
 
     # Normalize service names
     spans["service_norm"] = spans["serviceName"].apply(lambda s: normalize_service_name(s, metric_services))

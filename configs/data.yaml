@@ -25,6 +25,7 @@ test_repetitions: [3]
 # and appear only in the test split. Tune anomaly and unknown-fault thresholds
 # using validation cases only.
 
-# Window length (in timesteps) is chosen after checking the sampling interval
-# with scripts/explore_case.py.
-window_length: null
+# Initial baseline setting: 30-second mean windows, scored every 10 seconds.
+# Treat as a starting point; compare alternatives before making research claims.
+window_length: 30
+window_stride: 10
