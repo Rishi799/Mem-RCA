@@ -48,6 +48,7 @@ def root_rankings(frame: pd.DataFrame, horizon: int, split: str = "test") -> pd.
         frame["split"].eq(split)
         & frame["seconds_from_injection"].ge(0)
         & frame["seconds_from_injection"].lt(horizon)
+        & frame["anomaly_score"].notna()
     ]
     output: list[dict[str, object]] = []
     for (fold, system, case), group in test.groupby(["fold", "system", "case"]):
@@ -82,6 +83,7 @@ def case_service_scores(frame: pd.DataFrame, horizon: int) -> pd.DataFrame:
         frame["split"].isin(["validation", "test"])
         & frame["seconds_from_injection"].ge(0)
         & frame["seconds_from_injection"].lt(horizon)
+        & frame["anomaly_score"].notna()
     ]
     records: list[dict[str, object]] = []
     case_cols = ["fold", "system", "case", "split", "fault", "fault_status", "root_cause_service"]

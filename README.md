@@ -5,7 +5,7 @@
 **Course:** AI253IA — Artificial Neural Networks & Deep Learning (PBL), RV College of Engineering<br>
 **Team:** Priyanshi Gupta (1RV24CI088) · Rishi Agarwal (1RV24CI099) · Sambhav Badaya (1RV24CI106)
 
-Mem-RCA is a research prototype for detecting abnormal microservice behavior and ranking likely root-cause services. Its current detector is a normal-only LSTM forecaster; a validation-tuned trace graph reranker is evaluated separately. Unknown-fault rejection and calibrated uncertainty are research goals, not implemented features yet.
+Mem-RCA is a research prototype for detecting abnormal microservice behavior and ranking likely root-cause services. It includes a normal-only LSTM baseline and a Phase 3 temporal-graph candidate with incident-level temperature calibration and abstention. RE2 results are exploratory; external validation and reliable selective diagnosis have not been established.
 
 ## Research direction
 
@@ -16,7 +16,7 @@ The main research question is whether graph-informed diagnosis can remain reliab
 - distinguish known fault classes from unfamiliar or uncertain incidents;
 - evaluate how diagnosis changes when telemetry sources are missing.
 
-The demonstration replays recorded RCAEval incidents through a local event stream and visualizes anomaly alerts across the observed service graph. A held-out analysis estimates the time gap between persistent alerts on connected services. These are recorded-data results, not a live production monitor or a causal forecast.
+The demonstration replays recorded RCAEval incidents through a local event stream and visualizes anomaly alerts across the observed service graph. A held-out analysis estimates the time gap between persistent alerts on connected services. These are recorded-data results, not a live production monitor or a causal forecast. The temporal-graph inference API can score raw windows during replay with `--checkpoint`; incident-level calibration is only reported after aggregation.
 
 ## Current implementation
 
@@ -34,12 +34,19 @@ The repository contains data preparation, baseline training, and evaluation tool
 - `scripts/evaluate_graph_ranker.py` tunes a graph-supported reranker on validation cases and compares it with metric-only RCA on test cases.
 - `scripts/serve_live_replay.py` streams one recorded incident to a local browser dashboard, with thresholded service alerts and observed alert-delay updates.
 - `scripts/analyze_propagation.py` measures persistent alert coverage and connected-service alert delays on test cases using validation thresholds and training-fold trace topology.
+- `scripts/build_external_manifest.py` combines RE2 training cases with independent RE1 validation and RE3 test suites for cross-suite evaluation.
+- `scripts/run_temporal_graph_grid.py` runs seeds and graph/mask/consistency ablations with aggregate reports.
+- `scripts/compare_temporal_graph_ablations.py` computes paired deltas against the matching full-model runs.
+- `scripts/summarize_temporal_graph_calibration.py` aggregates validation-only calibration diagnostics.
+- `src/memrca/models/temporal_graph_inference.py` loads a candidate temporal-graph checkpoint and applies its saved preprocessing and calibration.
 - `scripts/explore_case.py` summarizes one case, ranks services by a simple metric-shift score, and saves plots.
 - `configs/data.yaml` records the RE2 systems, fault classes, known/unseen folds, and initial 30-second windows scored every 10 seconds.
 
 **Phase 1 status:** the RE2 data pipeline, split validation, Isolation Forest baseline, trace graph audit, and graph-supported root-cause evaluation are implemented. The Isolation Forest and graph reranker are baselines, not learned graph models.
 
 **Phase 2 status:** legacy and robust LSTM pipelines have been trained and compared across all nine RE2 fold/system combinations. Validation-only selection produces separate score sets for anomaly detection and RCA because the best preprocessing differs by system and objective. See the [Phase 2 guide](docs/PHASE2_LSTM_START.md) and [results and limitations](docs/PHASE2_RESULTS.md). The LSTM is metric-only; graph evidence is a separately tuned trace reranker, not a learned graph neural network.
+
+**Phase 3 status:** the LSTM plus directed graph-attention candidate, validation calibration, inference API, and recorded replay integration are implemented. The full model completed 27 RE2 runs (three folds, three systems, three seeds); graph, observation-mask, and consistency-loss ablations completed 27 more runs (three folds, three systems, one seed per ablation). RE2 results remain exploratory because test cases were viewed during development and folds reuse incident configurations. Independent RE1 validation and untouched RE3 testing could not run: Hugging Face DNS resolution fails in this environment. See the [research protocol](docs/PHASE3_RESEARCH_PROTOCOL.md), [pilot report](docs/PHASE3_PILOT.md), [RE2 grid results](docs/PHASE3_RE2_GRID_RESULTS.md), and [calibration status](docs/PHASE3_CALIBRATION_STATUS.md). Future-impact-time prediction and a production telemetry adapter remain separate work.
 
 ## Dataset
 
@@ -159,9 +166,16 @@ scripts/compare_window_runs.py  Window-size sensitivity comparison
 scripts/build_replay_demo.py  Self-contained recorded incident replay
 scripts/serve_live_replay.py  Local streamed replay dashboard
 scripts/analyze_propagation.py Held-out connected-service alert-delay analysis
+scripts/build_external_manifest.py RE2 train / RE1 validation / RE3 test manifest
+scripts/train_temporal_graph.py  Candidate missingness-aware graph-temporal trainer
+scripts/run_temporal_graph_grid.py Seed and ablation matrix runner
+scripts/evaluate_temporal_graph.py  Root-head and selective-risk evaluation
 src/memrca/data/           RCAEval loading, windowing, and trace-derived edges
+src/memrca/data/temporal_graph.py  Train-normal scaling and aligned service graph windows
 src/memrca/baselines/      Normal-only anomaly baseline
-src/memrca/models/         Phase 2 LSTM forecaster and inference helper
+src/memrca/models/         LSTM, inference helper, and Phase 3 temporal graph candidate
+scripts/train_temporal_graph.py  Candidate graph-temporal model trainer
+scripts/evaluate_temporal_graph.py  Root-head versus forecast-score RCA evaluation
 scripts/train_lstm_forecaster.py  Per-system/fold LSTM training and score export
 scripts/train_lstm_grid.py   Sequential fold/system training runner
 scripts/evaluate_lstm_scores.py  Validation-calibrated anomaly and RCA metrics
@@ -174,6 +188,8 @@ experiments/               Generated figures and results; ignored by Git
 docs/PHASE2_LSTM_START.md  Phase 2 training, handoff, and limitations
 docs/PHASE2_RESULTS.md    Phase 2 results, selected variants, and research limits
 docs/PHASE2_PROPAGATION.md  Alert-delay method, findings, and limitations
+docs/PHASE3_RESEARCH_PROTOCOL.md  Candidate research question and evaluation protocol
+docs/PHASE3_PILOT.md   One-system exploratory temporal-graph pilot results
 ```
 
 ## Phase 1 deliverables and current limits
