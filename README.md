@@ -1,11 +1,119 @@
 # Mem-RCA
 
-**Deep-learning anomaly detection and root-cause ranking for microservices**
+**Open-world root cause analysis for microservices via propagation-aware incident memory**
 
 **Course:** AI253IA — Artificial Neural Networks & Deep Learning (PBL), RV College of Engineering<br>
 **Team:** Priyanshi Gupta (1RV24CI088) · Rishi Agarwal (1RV24CI099) · Sambhav Badaya (1RV24CI106)
 
-Mem-RCA is a research prototype for detecting abnormal microservice behavior and ranking likely root-cause services. It includes a normal-only LSTM baseline and a Phase 3 temporal-graph candidate with incident-level temperature calibration and abstention. RE2 results are exploratory; external validation and reliable selective diagnosis have not been established.
+Root-cause analysis (RCA) models are usually trained and tested on the same fixed set of failure types. Real systems keep producing failures nobody has labelled yet. Mem-RCA handles this open-world setting:
+
+1. A deep localiser (per-service LSTM encoders + directed graph attention) ranks the services most likely to be the root cause.
+2. The incident is summarised by a **root-anchored fingerprint**: the root service's own metric shifts, plus the symptoms it caused elsewhere.
+3. An **incident memory** compares the fingerprint with stored incidents of every known failure type. If nothing is familiar enough (below a threshold τ set on validation data), the incident is flagged **NOVEL**.
+4. NOVEL incidents are grouped. An engineer names a group, and it is **enrolled as a new failure type without retraining**.
+5. **PropagationNet**, a graph neural network with a hazard head, forecasts **which other services the fault will reach and when**. It updates the forecast as new telemetry arrives.
+6. Evaluation is **leakage-aware**: fault types are held out, there are no-telemetry and candidate-only baselines, roots are held out, and two independent suites (RE1, RE3) were checked under a protocol fixed in advance.
+
+## Results at a glance
+
+Novelty AUROC: how well unseen-type incidents are separated from known ones (0.5 = chance).
+
+| Experiment | Online Boutique | Sock Shop | Train Ticket | Status |
+|---|---:|---:|---:|---|
+| RE2, 2 fault types unseen (development) — Mem-RCA | 0.78 | 0.60 | 0.79 | optimistic: used to design the method |
+| RE2 — average over services (global mean) | 0.66 | 0.56 | 0.55 | baseline |
+| RE1, 1 fault type unseen (independent suite) — Mem-RCA | 0.82 | 0.76 | 0.65 | confirmatory |
+| RE1 — best fixed fingerprint / global mean | 0.84 / 0.82 | 0.71 / 0.54 | 0.62 / 0.60 | baselines |
+| RE3 code-level faults vs RE2 memory — Mem-RCA | 0.84 | 0.83 | 0.96 | confirmatory, p < 0.001 each |
+| RE3 — average over services (global mean) | 0.50 | 0.59 | 0.35 | baseline |
+
+Pre-registered hypotheses ([protocol](docs/EXTERNAL_VALIDATION_PROTOCOL.md)):
+
+- **H1 is not supported.** On RE1 Train Ticket, the root-anchored fingerprint did not beat global pooling (0.59 vs 0.60 / 0.62).
+- **H2 is supported.** Averaged over the RE1 systems, Mem-RCA scores 0.74, above every fixed fingerprint (0.72 / 0.67 / 0.66).
+- **H3 is supported.** RE3 code faults look unfamiliar in every system.
+
+Findings:
+
+- **No single fingerprint is safe everywhere; choosing it per system is.**
+  - Averaging over services (the usual summary) is near or below chance on Train Ticket in RE2 and RE3, and weak on Sock Shop.
+  - Root anchoring helped on RE2 and RE3 Train Ticket but did not replicate on RE1.
+  - The per-system choice made on known incidents only (Mem-RCA) is the most reliable option across suites.
+- **Discovery and enrolment.** On RE2 Train Ticket, 47 % of unseen fault types are discovered from the incident stream, with clusters 98 % pure. After enrolment, 90 % of later incidents of the new type are named correctly. With 3 examples, a new type is recognised 87 % of the time. On RE1, k-shot enrolment beats the averaged fingerprint in every system.
+- **The root-cause benchmark has a shortcut.** RE2 has only five root services per system. A rule with no learning that only looks at those five nearly matches the learned localiser (Train Ticket Hit@1 0.95 vs 0.97). When a root service is held out of training, the learned localiser drops to Hit@1 0.20 / 0.13 / 0.09 (OB / SS / TT), while the learning-free largest-shift rule keeps 0.93 / 0.84 / 0.79. The localiser has largely learned *which services are usually roots*.
+
+- **Time-to-impact forecasting (C5).** Faults travel mainly up the call chain: on Online Boutique, 67 % of the root's callers are hit, with a median of 11 s, against 36 % of its callees at 70 s.
+  - **RE2:** PropagationNet beats simple forecasts on unseen root services (AUROC 0.70 vs 0.66 / 0.63).
+  - **RE3, frozen protocol:**
+    - H5 supported: it orders who is hit first better, C-index 0.64 vs 0.55.
+    - H6 supported: its forecast improves as evidence arrives (0.68 → 0.73).
+    - H4 not supported: a simple per-hop table had the higher pooled AUROC, 0.74 vs 0.70.
+
+Full results, protocols and caveats:
+- [docs/OPEN_WORLD_RESULTS.md](docs/OPEN_WORLD_RESULTS.md)
+- [docs/EXTERNAL_VALIDATION_PROTOCOL.md](docs/EXTERNAL_VALIDATION_PROTOCOL.md)
+- [docs/PROPAGATION_PROTOCOL.md](docs/PROPAGATION_PROTOCOL.md)
+
+## Quick start: the Mem-RCA console
+
+```powershell
+python scripts/serve_console.py
+```
+
+Open <http://127.0.0.1:8765>, pick an environment and press **Start monitoring**. The console has two modes:
+
+- **Live monitoring** (default) streams each recorded incident's telemetry at 5–60× speed, like a monitoring dashboard. A **Service health** card shows every service as a tile, the anomaly level of the most anomalous service against the alert threshold, and an activity feed. The detector uses the normal period only, so nothing alerts before the fault; the incident opens by itself when the first service's anomaly is confirmed (onset + 5 s). Root cause and pattern appear once the 2-minute evidence window the models use has passed, and the blast radius then runs on the replay clock. After the 5-minute forecast window the incident closes and the next recording starts. **Skip ahead** jumps to the alert, the analysis or the end of the incident. Nothing on screen uses data after the replay clock.
+- **Step-through** opens one recorded incident at a time with **Next incident** (or **▶ Auto**).
+
+Every incident gets an ID (`INC-0001`, …) and a header with the three answers an on-call engineer needs: root cause, diagnosis (known pattern or new pattern) and blast radius. Below it:
+
+- **Blast radius forecast**: a dependency graph of every service, with the faulty service in the centre and one ring per call hop. Solid links are calls seen in the traces. Dashed links are documented dependencies that the traces miss ([architecture.py](src/memrca/propagation/architecture.py)): the Online Boutique and Sock Shop architectures (RCAEval has no Sock Shop traces) and each Train Ticket database's owner service. These links are for drawing only; PropagationNet uses the traced graph. Services with no link sit in a band below the graph; if the origin itself has no link, the graph is centred on the best-connected service. Each service is coloured by its state (affected, expected with time and chance, predicted but not hit, possible, unlikely). The spread path is drawn along the links, labelled with the delay after the previous service. **Play** replays the five minutes after the fault (one 10-s step per 0.9 s) and pauses the live incident stream. By default the forecast stays fixed from the moment it was made, so the only changes on screen are services that really get affected; **Update forecast every 10 s** switches to the live forecast. A grouped list, a table of every service and a forecast check are below it;
+- **Root cause analysis**: the deep localiser's ranking of likely origins, next to the largest-metric-deviation ranking, and the origin's telemetry;
+- **Failure pattern match**: the incident signature, its similarity to each known pattern and the match threshold τ; an incident below τ is held as a new pattern instead of being forced into a known one;
+- **Pattern library**: a map of past incidents, the known patterns, and groups of unclassified incidents that can be named and turned into a new pattern with one click (no retraining);
+- **Incident history** for the replay.
+
+**Evaluation mode** reveals the recorded ground truth and scores every decision (origin, pattern, forecast). The **Model insights** tab shows the benchmark results and the architecture.
+
+The console reads the outputs of the experiment scripts below, so run those first. Everything is recorded-data replay, not live telemetry.
+
+## Reproducing the open-world experiments
+
+After installing (see [Setup](#setup)) and downloading the data (`python scripts/download.py --suite all`):
+
+```powershell
+# development set: RE2, using the Phase 3 temporal-graph checkpoints
+python scripts/extract_incident_features.py        # localiser scores + embeddings per incident (GPU, ~12 min)
+python scripts/extract_shift_profiles.py           # learning-free metric-shift profiles for RE1/RE2/RE3 (~5 min)
+python scripts/evaluate_open_world.py              # E2: root-anchored vs global fingerprints; C4 shortcut check
+python scripts/select_fingerprint.py               # validation-only selection of view and memory (Mem-RCA)
+python scripts/simulate_discovery.py --variants shift:global_mean+prototype shift:global_max+split1 shift:global_max+split3 shift:anchor_pred+split1
+python scripts/run_service_holdout.py              # C4: retrain without each root service (GPU)
+# confirmatory set: RE1 and RE3, protocol in docs/EXTERNAL_VALIDATION_PROTOCOL.md
+python scripts/train_external_localisers.py        # localiser per RE1 fold (GPU)
+python scripts/evaluate_external.py                # H1-H3 checks, discovery and few-shot on RE1
+# time-to-impact forecasting (C5), protocol in docs/PROPAGATION_PROTOCOL.md
+python scripts/propagation_feasibility.py          # 1-second onset labels and propagation structure on RE2
+python scripts/train_propagation.py                # PropagationNet vs baselines on RE2 (GPU, ~35 min)
+python scripts/train_propagation.py --confirm      # H4-H6 on RE3, run once
+python scripts/make_figures.py                     # figures in docs/figures/
+python -m unittest discover -s tests
+```
+
+Open-world code lives in `src/memrca/openworld/`:
+
+| Module | Contents |
+|---|---|
+| [fingerprint.py](src/memrca/openworld/fingerprint.py) | metric-shift profiles, pooling (global mean / global max / root-anchored / hybrid) |
+| [memory.py](src/memrca/openworld/memory.py) | the incident memory: prototypes or k-NN, NOVEL threshold, enrolment |
+| [metrics.py](src/memrca/openworld/metrics.py) | novelty AUROC and OSCR |
+| [incidents.py](src/memrca/openworld/incidents.py) | incident sets for RE1 folds and the RE2 → RE3 cross-suite test |
+| [console.py](src/memrca/openworld/console.py) | the interactive session behind the console |
+| [propagation/](src/memrca/propagation/) | 1-second onset detection, time-to-impact samples, PropagationNet, forecasts and live-replay telemetry for the console |
+
+## Development history (Phases 1–3)
+
+The sections below describe the earlier data pipeline, LSTM and temporal-graph work, which the open-world study builds on.
 
 ## Research direction
 
@@ -46,7 +154,7 @@ The repository contains data preparation, baseline training, and evaluation tool
 
 **Phase 2 status:** legacy and robust LSTM pipelines have been trained and compared across all nine RE2 fold/system combinations. Validation-only selection produces separate score sets for anomaly detection and RCA because the best preprocessing differs by system and objective. See the [Phase 2 guide](docs/PHASE2_LSTM_START.md) and [results and limitations](docs/PHASE2_RESULTS.md). The LSTM is metric-only; graph evidence is a separately tuned trace reranker, not a learned graph neural network.
 
-**Phase 3 status:** the LSTM plus directed graph-attention candidate, validation calibration, inference API, and recorded replay integration are implemented. The full model completed 27 RE2 runs (three folds, three systems, three seeds); graph, observation-mask, and consistency-loss ablations completed 27 more runs (three folds, three systems, one seed per ablation). RE2 results remain exploratory because test cases were viewed during development and folds reuse incident configurations. Independent RE1 validation and untouched RE3 testing could not run: Hugging Face DNS resolution fails in this environment. See the [research protocol](docs/PHASE3_RESEARCH_PROTOCOL.md), [pilot report](docs/PHASE3_PILOT.md), [RE2 grid results](docs/PHASE3_RE2_GRID_RESULTS.md), and [calibration status](docs/PHASE3_CALIBRATION_STATUS.md). Future-impact-time prediction and a production telemetry adapter remain separate work.
+**Phase 3 status:** the LSTM plus directed graph-attention candidate, validation calibration, inference API, and recorded replay integration are implemented. The full model completed 27 RE2 runs (three folds, three systems, three seeds); graph, observation-mask, and consistency-loss ablations completed 27 more runs (three folds, three systems, one seed per ablation). RE2 results remain exploratory because test cases were viewed during development and folds reuse incident configurations. RE1 and RE3 were later downloaded and evaluated under a frozen protocol for the open-world study; see [EXTERNAL_VALIDATION_PROTOCOL.md](docs/EXTERNAL_VALIDATION_PROTOCOL.md). See the [research protocol](docs/PHASE3_RESEARCH_PROTOCOL.md), [pilot report](docs/PHASE3_PILOT.md), [RE2 grid results](docs/PHASE3_RE2_GRID_RESULTS.md), and [calibration status](docs/PHASE3_CALIBRATION_STATUS.md). Future-impact-time prediction and a production telemetry adapter remain separate work.
 
 ## Dataset
 
@@ -154,6 +262,24 @@ For graph-supported RCA, `scripts/evaluate_graph_ranker.py` chooses a weight per
 ## Project layout
 
 ```text
+app/                       Mem-RCA console front end (HTML/CSS/JS, no external libraries)
+scripts/serve_console.py   Local server for the console (python scripts/serve_console.py)
+src/memrca/openworld/      Fingerprints, incident memory, metrics, incident sets, console session
+scripts/extract_incident_features.py  RE2 localiser scores and embeddings per incident
+scripts/extract_shift_profiles.py     Learning-free metric-shift profiles for RE1/RE2/RE3
+scripts/evaluate_open_world.py        E2 fingerprint comparison and C4 shortcut check
+scripts/select_fingerprint.py         Validation-only choice of fingerprint view and memory
+scripts/simulate_discovery.py         Discover-and-enrol stream (C3) and k-shot enrolment (E4)
+scripts/run_service_holdout.py        Root-service hold-out retraining (C4)
+scripts/train_external_localisers.py  Localiser per RE1 open-world fold
+scripts/evaluate_external.py          Confirmatory RE1/RE3 evaluation (H1-H3)
+scripts/propagation_feasibility.py    Onset labels and propagation structure (C5 feasibility)
+scripts/train_propagation.py          PropagationNet training, baselines, RE2 dev and RE3 confirmatory tests
+src/memrca/propagation/               Onset detection, time-to-impact dataset, PropagationNet, console forecasts
+docs/PROPAGATION_PROTOCOL.md          C5 protocol frozen before the RE3 run, with its outcome
+scripts/make_figures.py               Result figures in docs/figures/
+docs/OPEN_WORLD_RESULTS.md            Open-world results, lessons and caveats
+docs/EXTERNAL_VALIDATION_PROTOCOL.md  Protocol frozen before the RE1/RE3 evaluation
 configs/data.yaml          Dataset settings and provisional open-world folds
 scripts/download.py        RCAEval download command
 scripts/audit_dataset.py   Dataset coverage and split-balance report

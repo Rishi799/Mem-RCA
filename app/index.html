@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mem-RCA · Incident intelligence</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Ccircle cx='16' cy='16' r='5' fill='white'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='white' stroke-width='2' stroke-dasharray='4 3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="console.css">
+</head>
+<body class="mode-live">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><circle cx="16" cy="16" r="5"/><circle cx="16" cy="16" r="10" class="ring"/></svg>
+      <div>
+        <div class="brand-name">Mem-RCA</div>
+        <div class="brand-sub">Incident intelligence for microservices</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" class="tab active" data-view="console" aria-selected="true">Incidents</button>
+      <button role="tab" class="tab" data-view="evidence" aria-selected="false">Model insights</button>
+    </nav>
+    <span class="status-pill" id="status-pill"><i></i><span>Idle</span></span>
+    <button class="icon-btn" id="theme" title="Switch light/dark theme" aria-label="Switch light/dark theme">◐</button>
+  </header>
+
+  <main>
+    <!-- ======================= INCIDENTS ======================= -->
+    <section class="view active" id="view-console">
+      <div class="controls card">
+        <label class="field grow">
+          <span>Environment</span>
+          <select id="scenario"></select>
+        </label>
+        <div class="buttons">
+          <div class="seg" role="group" aria-label="Mode">
+            <button data-mode="live" class="active" title="Stream the recorded telemetry like a monitoring dashboard">Live monitoring</button>
+            <button data-mode="step" title="Open one recorded incident at a time">Step-through</button>
+          </div>
+          <button class="btn primary" id="start">Start monitoring</button>
+          <button class="btn live-only" id="live-pause" disabled>❚❚ Pause</button>
+          <button class="btn live-only" id="live-skip" disabled title="Jump to the next event: the alert, the analysis, or the end of the incident">⏭ Skip ahead</button>
+          <label class="speed live-only"><span>Speed</span>
+            <select id="speed" aria-label="Replay speed"><option value="5">5×</option><option value="10" selected>10×</option><option value="30">30×</option><option value="60">60×</option></select>
+          </label>
+          <button class="btn step-only" id="next" disabled>Next incident</button>
+          <button class="btn step-only" id="play" disabled>▶ Auto</button>
+          <label class="toggle" title="Reveal the recorded ground truth and score every decision"><input type="checkbox" id="truth" aria-label="Evaluation mode"> <span>Evaluation mode</span></label>
+        </div>
+        <p class="scenario-desc" id="scenario-desc"></p>
+        <div class="config-chips" id="config"></div>
+        <div class="progress" aria-hidden="true"><i id="progress"></i></div>
+      </div>
+
+      <div class="kpis" id="kpis"></div>
+
+      <section class="card incident-header" id="situation" hidden>
+        <div class="ih-top">
+          <span class="ih-id" id="ih-id"></span>
+          <h2 id="ih-title"></h2>
+          <div class="ih-badges" id="ih-badges"></div>
+        </div>
+        <div class="ih-grid">
+          <div class="ih-field"><span class="ih-label">Root cause</span><b id="ih-root"></b><span id="ih-root-sub"></span></div>
+          <div class="ih-field"><span class="ih-label">Diagnosis</span><b id="ih-diag"></b><span id="ih-diag-sub"></span></div>
+          <div class="ih-field"><span class="ih-label">Blast radius</span><b id="ih-blast"></b><span id="ih-blast-sub"></span></div>
+        </div>
+      </section>
+
+      <section class="card health live-only" id="health">
+        <header class="card-head">
+          <h2>Service health</h2>
+          <span class="muted small" id="health-sub">Press Start monitoring to stream the recorded telemetry</span>
+        </header>
+        <div class="health-grid">
+          <div>
+            <div class="tiles" id="tiles"></div>
+            <h3>Most anomalous service <span class="muted small">anomaly level, 1.0 = alert threshold</span></h3>
+            <div class="chart" id="health-chart"></div>
+          </div>
+          <div class="feed-box">
+            <h3>Activity</h3>
+            <ol class="feed" id="feed"><li class="muted small">No activity yet.</li></ol>
+          </div>
+        </div>
+        <p class="muted small live-note">Replaying recorded telemetry from the RCAEval benchmark. Everything on screen uses only data up to the replay clock.</p>
+      </section>
+
+
+      <article class="card" id="propagation-card">
+        <header class="card-head">
+          <h2>Blast radius forecast</h2>
+          <span class="muted small" id="prop-sub">Which services will be affected next, and when</span>
+        </header>
+        <div id="prop-empty" class="empty"><p>Open an incident to see which services the failure is expected to reach, and when.</p></div>
+        <div id="prop-body" hidden>
+          <div class="prop-controls">
+            <button class="btn primary" id="prop-play">▶ Play</button>
+            <input type="range" id="prop-time" min="0" max="300" step="10" value="0" aria-label="Seconds since the failure started">
+            <span class="prop-clock" id="prop-clock">+0 s</span>
+            <label class="toggle" title="Refresh the forecast every 10 s with the data seen so far"><input type="checkbox" id="prop-live"> <span>Update forecast every 10 s</span></label>
+            <div class="seg" role="group" aria-label="Forecast view">
+              <button data-pview="graph">Dependency graph</button>
+              <button data-pview="list">Grouped list</button>
+            </div>
+          </div>
+          <div class="prop-story" id="prop-story"></div>
+          <div class="prop-key" id="prop-key"></div>
+          <div class="graph-box" id="prop-graph"></div>
+          <div class="lanes" id="prop-lanes"></div>
+          <h3>All services <span class="muted small">ordered by expected impact</span></h3>
+          <div id="prop-table"></div>
+          <button class="btn small" id="prop-all" hidden>Show all services</button>
+          <div class="prop-score" id="prop-score"></div>
+          <p class="muted small" id="prop-note"></p>
+        </div>
+      </article>
+
+      <div class="grid">
+        <article class="card" id="incident-card">
+          <header class="card-head">
+            <h2>Root cause analysis</h2>
+            <span class="muted" id="incident-id">No active incident</span>
+          </header>
+          <div id="incident-empty" class="empty">
+            <p>Start a replay to stream recorded incidents. For each one, the deep localiser ranks the services most likely to be the origin of the failure.</p>
+          </div>
+          <div id="incident-body" hidden>
+            <h3>Most likely origin</h3>
+            <div class="rank-cols">
+              <div><div class="sub">Deep localiser (LSTM + graph attention)</div><div id="rank-learned"></div></div>
+              <div><div class="sub">Largest metric deviation</div><div id="rank-shift"></div></div>
+            </div>
+            <h3 id="series-title">Telemetry</h3>
+            <div id="series" class="chart"></div>
+            <div class="truth-box" id="incident-truth" hidden></div>
+          </div>
+        </article>
+
+        <article class="card" id="verdict-card">
+          <header class="card-head"><h2>Failure pattern match</h2><span class="muted" id="verdict-step"></span></header>
+          <div id="verdict-empty" class="empty"><p>The incident's signature is compared with every known failure pattern. Unfamiliar incidents are flagged as a new pattern instead of being forced into a known one.</p></div>
+          <div id="verdict-body" hidden>
+            <div class="verdict" id="verdict"></div>
+            <a class="jump" href="#propagation-card">View blast radius forecast ↑</a>
+            <div class="gauge" id="gauge"></div>
+            <h3>Similarity to known patterns</h3>
+            <div id="similar"></div>
+            <h3>Incident signature <span class="muted small">deviation of each metric from its normal level</span></h3>
+            <div id="fingerprint" class="fp-grid"></div>
+          </div>
+        </article>
+
+        <article class="card" id="memory-card">
+          <header class="card-head"><h2>Pattern library</h2><span class="muted" id="memory-sub"></span></header>
+          <div id="map" class="chart map"></div>
+          <div class="legend" id="map-legend"></div>
+          <h3>Unclassified incident groups</h3>
+          <div id="candidates"><p class="muted small">Incidents that match no known pattern collect here. Once three or more look alike, they are proposed as a new pattern for review.</p></div>
+          <h3>Known patterns</h3>
+          <div id="types" class="type-list"></div>
+        </article>
+      </div>
+
+
+      <article class="card">
+        <header class="card-head"><h2>Incident history</h2><span class="muted small">this replay, oldest first</span></header>
+        <div id="timeline" class="timeline"><span class="muted small">No incidents yet.</span></div>
+      </article>
+    </section>
+
+    <!-- ======================= MODEL INSIGHTS ======================= -->
+    <section class="view" id="view-evidence">
+      <div class="intro">
+        <h1>Model insights</h1>
+        <p>How well the models behind Mem-RCA work, measured on RCAEval, a public benchmark of 735 recorded incidents in three microservice applications. RE2 was used to build the models, so its numbers are optimistic. RE1 and RE3 were held out and tested once, under rules written down in advance.</p>
+      </div>
+      <h2 class="section-title">Performance at a glance</h2>
+      <div class="bignums" id="bignums"><p class="muted">Loading…</p></div>
+      <h2 class="section-title">Detailed results</h2>
+      <div class="evidence" id="evidence"></div>
+      <h2 class="section-title">Architecture</h2>
+      <div class="pipeline" id="pipeline"></div>
+      <div class="contrib">
+        <div class="card"><b>Deep localiser</b><p>Per-service LSTM encoders read 30-second metric windows; directed graph attention passes evidence along the observed call graph; a root head ranks services. Trained on known incidents only.</p></div>
+        <div class="card"><b>Pattern memory</b><p>Each incident becomes a signature centred on its origin service. Nearest-neighbour similarity decides known vs. new; the threshold is set on validation data so 95 % of known incidents are accepted.</p></div>
+        <div class="card"><b>Pattern discovery</b><p>Unclassified incidents are clustered (HDBSCAN). An engineer names a group and it becomes a new pattern immediately, with no retraining.</p></div>
+        <div class="card"><b>Blast radius forecast</b><p>PropagationNet, a graph neural network with a discrete-time hazard head, estimates for every service the chance and time of impact, and updates every 10 seconds.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <script src="console.js"></script>
+</body>
+</html>
