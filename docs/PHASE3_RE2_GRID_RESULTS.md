@@ -52,4 +52,4 @@ The graph and consistency terms show little F1 change on OB/SS; TT falls when th
 
 ## Artifacts
 
-The run-level and aggregated full-model CSVs are under the ignored `experiments/temporal_graph_re2_grid/` directory. Ablation outputs and paired deltas are under `experiments/temporal_graph_re2_ablation_grid/`. The calibration report is [PHASE3_CALIBRATION_STATUS.md](PHASE3_CALIBRATION_STATUS.md). RE1/RE3 external validation remains necessary; current data downloads fail because the machine cannot resolve the Hugging Face host.
+The run-level and aggregated full-model CSVs are under the ignored `experiments/temporal_graph_re2_grid/` directory. Ablation outputs and paired deltas are under `experiments/temporal_graph_re2_ablation_grid/`. The calibration report is [PHASE3_CALIBRATION_STATUS.md](PHASE3_CALIBRATION_STATUS.md). RE1 and RE3 were later downloaded and used for the open-world external validation ([EXTERNAL_VALIDATION_PROTOCOL.md](EXTERNAL_VALIDATION_PROTOCOL.md)); the Phase 3 grid itself was not re-run on them.

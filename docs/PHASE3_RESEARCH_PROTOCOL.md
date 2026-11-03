@@ -133,7 +133,7 @@ python scripts/run_temporal_graph_grid.py --folds fold1 --systems ob ss tt --see
 
 Repeat manifest creation and the grid command for `fold2` and `fold3`, changing the file names and `--folds` value. The grid writes per-run scores and aggregate anomaly, RCA, and selective-confidence CSVs. The full matrix is compute-heavy; it can be resumed without `--force` because completed checkpoints and score files are skipped.
 
-In this workspace, RE1/RE3 case metadata are present in `cases.parquet`, but their case folders are not downloaded. The RE3 download attempt failed because DNS/network access to Hugging Face was unavailable. Until those case folders are downloaded, independent-suite metrics cannot be produced here.
+Update: RE1 and RE3 case folders were later downloaded and evaluated for the open-world study under a frozen protocol ([EXTERNAL_VALIDATION_PROTOCOL.md](EXTERNAL_VALIDATION_PROTOCOL.md)). At the time of writing this section, the download had failed because DNS/network access to Hugging Face was unavailable.
 
 To run one pilot job on the GPU after the existing RE2 split and training-edge manifests are available:
 
