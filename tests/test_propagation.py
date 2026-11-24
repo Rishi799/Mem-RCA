@@ -49,7 +49,7 @@ class IncidentTests(unittest.TestCase):
         self.assertEqual(inc.onset_bin[front], CENSORED)
         self.assertAlmostEqual(inc.delay[api], 38, delta=5)  # api at ~40 s, root at ~2 s
         self.assertEqual(inc.dynamic.shape, (N_BINS, 3, inc.dynamic.shape[2]))
-        self.assertEqual(inc.static[api, STATIC_NAMES.index("hop_up")] * 3, 1)
+        self.assertAlmostEqual(float(inc.static[api, STATIC_NAMES.index("hop_up")] * 3), 1.0, places=5)
         self.assertEqual(inc.static[api, STATIC_NAMES.index("fault_delay")], 1)
         # by the time api's onset is confirmed, its callers see a callee that has been hit
         late = int(np.ceil((inc.delay[api] + 5) / 10))
