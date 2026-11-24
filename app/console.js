@@ -57,12 +57,24 @@ function typeColor(type) {
 
 /* ---------- tooltip: any element with data-tip ---------- */
 const tip = $("tooltip");
+/* first line as the title, the rest as details; placed above the cursor, or below it when the
+   sticky top bar would cover it */
 function showTip(text, x, y) {
-  tip.textContent = text;
+  const [title, ...rest] = String(text).split("\n");
+  const head = document.createElement("b");
+  head.textContent = title;
+  tip.replaceChildren(head);
+  if (rest.length) {
+    const body = document.createElement("span");
+    body.textContent = rest.join("\n");
+    tip.append(body);
+  }
   tip.hidden = false;
   const w = tip.offsetWidth, h = tip.offsetHeight;
-  tip.style.left = `${Math.min(window.innerWidth - w - 8, x + 14)}px`;
-  tip.style.top = `${Math.max(8, y - h - 10)}px`;
+  const bar = document.querySelector(".topbar");
+  const top = bar && getComputedStyle(bar).position === "sticky" ? bar.getBoundingClientRect().bottom + 8 : 8;
+  tip.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, x + 14))}px`;
+  tip.style.top = `${y - h - 12 >= top ? y - h - 12 : Math.min(window.innerHeight - h - 8, y + 18)}px`;
 }
 document.addEventListener("mousemove", (e) => {
   const el = e.target.closest ? e.target.closest("[data-tip]") : null;
